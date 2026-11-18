@@ -24,7 +24,7 @@ jobs:
             13f_pipeline
             tools
             tests
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
       - run: python -m pip install -r 13f_dashboard/requirements.txt
