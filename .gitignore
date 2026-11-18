@@ -1,0 +1,11 @@
+__pycache__/
+.venv/
+.state/
+.env
+.env.*
+/result/
+/shared/
+/13f_q[1-4]_*/
+13F_????Q?_vs_*/
+.13f-*.partial/
+*.zip
