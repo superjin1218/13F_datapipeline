@@ -6,26 +6,46 @@ Form 13F는 일정 규모 이상의 기관 투자운용사가 SEC에 제출하�
 
 ## 처음 실행하기
 
-Linux 또는 macOS에서 Git, Python 3.11 이상, 인터넷 연결이 필요합니다. 첫 실행에는 SEC 벌크 데이터를 내려받으므로 디스크 여유 공간을 1GB 이상 확보해 주세요.
+Windows, macOS, Linux에서 Python 3.11 이상과 인터넷 연결이 필요합니다. 첫 실행에는 SEC 벌크 데이터를 내려받으므로 디스크 여유 공간을 1GB 이상 확보해 주세요. 프로젝트는 홈이나 문서 폴더처럼 쓰기가 가능한 곳에 받습니다.
 
 ```bash
 git clone https://github.com/superjin1218/13F_datapipeline.git
 cd 13F_datapipeline
+```
+
+Git이 없다면 GitHub의 **Code → Download ZIP**으로 받아 압축을 풀고, 그 폴더에서 아래 명령을 실행합니다.
+
+### Windows PowerShell
+
+```powershell
+py -3 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r 13f_dashboard/requirements.txt
+$env:SEC_USER_AGENT = 'Your Name you@your-domain.com'
+.\.venv\Scripts\python.exe 13f_dashboard/run.py
+```
+
+Windows에서 `py` 대신 `python`을 쓰는 환경은 첫 줄을 `python -m venv .venv`로 실행합니다.
+
+### macOS 또는 Linux 터미널
+
+```bash
 python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r 13f_dashboard/requirements.txt
+./.venv/bin/python -m pip install -r 13f_dashboard/requirements.txt
 export SEC_USER_AGENT='Your Name you@your-domain.com'
-python 13f_dashboard/run.py
+./.venv/bin/python 13f_dashboard/run.py
 ```
 
 `SEC_USER_AGENT` 예시의 이름과 이메일을 본인의 연락처로 바꿉니다. SEC가 자동 수집 요청자를 확인할 때 쓰는 값입니다. Ubuntu나 Debian에서 `venv` 설치 오류가 나면 `python3-venv` 패키지를 설치한 뒤 다시 실행합니다. `uv`가 설치된 환경에서는 `uv venv .venv`와 `uv pip install --python .venv/bin/python -r 13f_dashboard/requirements.txt`로 환경을 준비할 수도 있습니다. [SEC 데이터 접근 안내](https://www.sec.gov/search-filings/edgar-search-assistance/accessing-edgar-data)
 
-브라우저에서 [로컬 파이프라인 열기](http://127.0.0.1:8787/)를 선택합니다. 포트가 사용 중이면 `python 13f_dashboard/run.py --port 8788`로 실행하고 주소의 포트를 `8788`로 바꿉니다.
+같은 컴퓨터의 브라우저에서 [로컬 파이프라인 열기](http://127.0.0.1:8787/)를 선택합니다. 포트가 사용 중이면 실행 명령 끝에 `--port 8788`을 붙이고 주소의 포트를 `8788`로 바꿉니다.
 
-1. **저장 폴더**에 전체 경로를 입력하거나 **찾아보기**로 고릅니다. 기본값은 프로젝트의 `result/`입니다.
+### 저장하고 열기
+
+1. **저장 폴더**에서 **찾아보기**로 폴더를 고릅니다. Windows에서는 드라이브도 바꿀 수 있습니다. 전체 경로를 직접 입력해 새 폴더에 저장할 수도 있습니다. 기본값은 프로젝트의 `result/`입니다.
 2. **대상 분기**와 **기준 분기**를 고릅니다. 첫 실행은 기본값인 `2026 Q1`과 `2025 Q4`로 시험할 수 있습니다.
 3. 두 분기에 **SEC 공시 확인됨**이 표시되면 분석 항목을 고르고 **START**를 누릅니다.
-4. **진행 상황**에서 수집·비교·저장 단계와 처리 건수를 확인합니다. 저장이 끝나면 **결과**에 폴더 경로, CSV 목록, 미리보기, 다운로드가 표시됩니다.
+4. **진행 상황**에서 수집·비교·저장 단계와 처리 건수를 확인합니다. 저장이 끝나면 **결과 → 폴더 열기**로 탐색기, Finder 또는 Linux 파일 관리자를 엽니다.
+5. 파일 옆 **열기**를 누르면 이 컴퓨터에 연결된 기본 앱으로 엽니다. **다운로드**로 받아 다른 앱에서 열 수도 있습니다. 기본 앱이 없거나 파일 관리자를 실행할 수 없는 환경에서는 **다운로드** 또는 **경로 복사**를 사용합니다.
 
 ## 결과 파일 읽기
 
@@ -58,7 +78,19 @@ result/
 | 2025 Q4와 2025 Q3 | [첫 번째 결과](examples/2025Q4_vs_2025Q3/v1/) | 79 |
 | 2025 Q4와 2025 Q3 | [두 번째 결과](examples/2025Q4_vs_2025Q3/v2/) | 53 |
 
-`institutions/`의 대용량 통합 CSV 두 개는 `.csv.xz`로 보관했습니다. 터미널에서 해당 폴더로 이동해 `xz -dk 파일명.csv.xz`를 실행하면 옆에 원본 CSV가 생깁니다.
+`institutions/`의 대용량 통합 CSV 두 개는 `.csv.xz`로 보관했습니다. 프로젝트 폴더에서 아래 명령을 실행하면 압축 파일 옆에 원본 CSV가 생깁니다. 다른 파일을 풀려면 따옴표 안의 경로를 바꿉니다.
+
+**Windows PowerShell**
+
+```powershell
+.\.venv\Scripts\python.exe tools/unpack_csv.py "examples/2025Q4_vs_2025Q3/v1/institutions/13_전체펀드_보유종목_통합.csv.xz"
+```
+
+**macOS 또는 Linux**
+
+```bash
+./.venv/bin/python tools/unpack_csv.py "examples/2025Q4_vs_2025Q3/v1/institutions/13_전체펀드_보유종목_통합.csv.xz"
+```
 
 ## SEC 공시 확인과 재시도
 
@@ -69,8 +101,6 @@ result/
 
 ## 개발 확인
 
-```bash
-.venv/bin/python -m unittest discover -s tests
-```
+설치할 때 사용한 가상 환경의 Python으로 `-m unittest discover -s tests`를 실행합니다. GitHub Actions에서는 Windows·macOS·Linux의 서버 시작, 한글 경로 저장, 취소, 압축 해제를 검사합니다. [운영체제별 테스트](https://github.com/superjin1218/13F_datapipeline/actions/workflows/desktop-tests.yml)
 
 화면은 Manrope 글꼴과 Phosphor 아이콘을 사용하며 라이선스는 `13f_dashboard/static/`에 포함되어 있습니다.

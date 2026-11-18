@@ -6,6 +6,8 @@ __pycache__/
 /result/
 /shared/
 /13f_q[1-4]_*/
+/examples/2025Q4_vs_2025Q3/v1/institutions/13_전체펀드_보유종목_통합.csv
+/examples/2025Q4_vs_2025Q3/v2/institutions/G07_전체펀드_통합.csv
 13F_????Q?_vs_*/
 .13f-*.partial/
 *.zip

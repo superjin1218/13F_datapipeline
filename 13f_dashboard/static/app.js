@@ -163,12 +163,17 @@ function renderProgress(run) {
   }
 }
 
+function fileRoute(run, filename) {
+  return `/runs/${encodeURIComponent(run.id)}/files/${encodeURIComponent(filename)}`;
+}
+
 function fileRow(run, file) {
-  const url = `/api/runs/${encodeURIComponent(run.id)}/files/${encodeURIComponent(file.name)}`;
+  const url = `/api${fileRoute(run, file.name)}`;
   const size = file.size >= 1048576 ? `${(file.size / 1048576).toFixed(1)} MB` : `${Math.ceil(file.size / 1024)} KB`;
   return `<div class="file-row"><span class="format-tag">${escapeText(file.format)}</span>
     <div><strong>${escapeText(file.name)}</strong><small>${size}</small></div>
-    <a class="button neutral" href="${url}" download aria-label="${escapeText(file.name)} 다운로드">${icon('download')} <span>다운로드</span></a></div>`;
+    <div class="file-actions"><button type="button" class="button neutral" data-open-file="${escapeText(file.name)}" aria-label="${escapeText(file.name)} 열기">${icon('arrow-up-right')} 열기</button>
+      <a class="button neutral" href="${url}" download aria-label="${escapeText(file.name)} 다운로드">${icon('download')} 다운로드</a></div></div>`;
 }
 
 function renderTables() {
@@ -206,7 +211,8 @@ function renderResult(run) {
   }).join('');
   $('result-content').innerHTML = `<div class="result-heading"><div><h2 id="results-title">결과</h2>
     <p>${quarterText(run.target)} vs ${quarterText(run.compare)}</p></div>
-    <button type="button" class="button neutral" data-copy-path>${icon('folder')} 경로 복사</button></div>
+    <div class="file-actions"><button type="button" class="button neutral" data-open-folder>${icon('folder-open')} 폴더 열기</button>
+      <button type="button" class="button neutral" data-copy-path>경로 복사</button></div></div>
     <p class="path-note">${escapeText(run.destination)}</p>
     <div class="result-kpis"><div class="kpi"><span>공통 기관</span><strong>${number.format(overview.common)}</strong></div>
       <div class="kpi"><span>${quarterText(run.target)} 보유액 (USD)</span><strong>${money(overview.target_value)}</strong></div>
@@ -268,6 +274,12 @@ async function loadFolders(path, fallback = false) {
     if (state.folderRequest !== request) return;
     state.folder = data;
     $('folder-path').value = data.path;
+    const drives = data.drives || [];
+    const drive = $('folder-drive');
+    drive.hidden = !drives.length;
+    drive.innerHTML = '<option value="" disabled>드라이브 선택</option>' +
+      drives.map((root) => `<option value="${escapeText(root)}">${escapeText(root)}</option>`).join('');
+    drive.value = drives.find((root) => data.path.toLowerCase().startsWith(root.toLowerCase())) || '';
     $('folder-select').disabled = false;
     $('folder-list').innerHTML = data.folders.map(({name, path}) =>
       `<button type="button" data-folder="${escapeText(path)}">${icon('folder')} ${escapeText(name)}</button>`).join('') ||
@@ -386,6 +398,7 @@ $('browse-button').addEventListener('click', () => {
   loadFolders($('output-dir').value, true);
 });
 $('folder-home').addEventListener('click', () => loadFolders(state.folder?.home));
+$('folder-drive').addEventListener('change', (event) => loadFolders(event.target.value));
 $('folder-parent').addEventListener('click', () => loadFolders(state.folder?.parent));
 $('folder-go').addEventListener('click', () => loadFolders($('folder-path').value));
 $('folder-path').addEventListener('keydown', (event) => {
@@ -398,9 +411,9 @@ $('folder-select').addEventListener('click', () => {
 });
 
 document.addEventListener('click', async (event) => {
-  const button = event.target.closest('button[data-close], button[data-folder], button[data-run-id], button[data-result-section], button[data-copy-path]');
+  const button = event.target.closest('button[data-close], button[data-folder], button[data-run-id], button[data-result-section], button[data-copy-path], button[data-open-folder], button[data-open-file]');
   if (!button) return;
-  const {close, folder, runId, resultSection, copyPath} = button.dataset;
+  const {close, folder, runId, resultSection, copyPath, openFolder, openFile} = button.dataset;
   try {
     if (close) $(close).close();
     else if (folder) await loadFolders(folder);
@@ -419,6 +432,15 @@ document.addEventListener('click', async (event) => {
     } else if (copyPath !== undefined) {
       await navigator.clipboard.writeText(state.result.destination);
       toast('저장 경로를 복사했습니다.');
+    } else if (openFolder !== undefined || openFile !== undefined) {
+      const path = openFile !== undefined ? `${fileRoute(state.result, openFile)}/open` :
+        `/runs/${encodeURIComponent(state.result.id)}/folder/open`;
+      button.disabled = true;
+      try {
+        await api(path, {method: 'POST'});
+      } finally {
+        button.disabled = false;
+      }
     }
   } catch (error) {
     toast(error.message);

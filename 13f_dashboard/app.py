@@ -2,13 +2,11 @@
 
 import asyncio
 import contextlib
-import fcntl
 import json
 import logging
 import os
 import secrets
 import shutil
-import signal
 import sqlite3
 import sys
 import time
@@ -23,6 +21,7 @@ from pydantic import BaseModel, Field
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from config import APP_DIR, EXPORTS, ROOT, SECTIONS, STAGES, STATE, Quarter, edgar_today, parse_quarter
+from desktop import drive_roots, instance_lock, open_path, worker_process_options
 from source import Sec, SourceError, has_published_filing
 
 
@@ -79,19 +78,21 @@ class Availability:
             return result
 
 
-def resolve_folder(raw, *, create_default=False):
+def resolve_folder(raw, *, create=False):
     try:
         path = Path(raw).expanduser()
         if not path.is_absolute():
             raise ValueError
-        if path == EXPORTS and create_default:
-            path.mkdir(exist_ok=True)
+        if create:
+            path.mkdir(parents=True, exist_ok=True)
         path = path.resolve(strict=True)
         if not path.is_dir():
             raise ValueError
         return path
     except (OSError, ValueError, RuntimeError) as exc:
-        raise HTTPException(422, '열 수 있는 로컬 폴더의 전체 경로를 입력해 주세요.') from exc
+        message = ('쓰기가 가능한 폴더의 전체 경로를 입력해 주세요.' if create
+                   else '열 수 있는 로컬 폴더의 전체 경로를 입력해 주세요.')
+        raise HTTPException(422, message) from exc
 
 
 def staged_output(run):
@@ -147,7 +148,7 @@ class Jobs:
     def start(self, options, target, compare):
         self.available()
         sections = [section for section in SECTIONS if section in options.sections]
-        base = resolve_folder(options.output_dir, create_default=True)
+        base = resolve_folder(options.output_dir, create=True)
         identifier = secrets.token_hex(8)
         destination = base / f'13F_{target.label}_vs_{compare.label}_{datetime.now():%Y%m%d-%H%M%S}_{identifier[:8]}'
         stages = list(STAGES)
@@ -202,7 +203,7 @@ class Jobs:
         worker = await asyncio.create_subprocess_exec(
             sys.executable, '-u', str(APP_DIR / 'pipeline.py'), cwd=ROOT,
             stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
-            start_new_session=True, limit=2 * 1024 * 1024,
+            env={**os.environ, 'PYTHONIOENCODING': 'utf-8'}, limit=2 * 1024 * 1024, **worker_process_options(),
         )
         try:
             worker.stdin.write(json.dumps(spec).encode())
@@ -234,12 +235,12 @@ class Jobs:
         finally:
             if worker.returncode is None:
                 with contextlib.suppress(ProcessLookupError):
-                    os.killpg(worker.pid, signal.SIGTERM)
+                    worker.terminate()
                 try:
                     await asyncio.wait_for(worker.wait(), 3)
                 except TimeoutError:
                     with contextlib.suppress(ProcessLookupError):
-                        os.killpg(worker.pid, signal.SIGKILL)
+                        worker.kill()
                     await worker.wait()
 
     async def execute(self, run):
@@ -286,11 +287,7 @@ class Jobs:
 @asynccontextmanager
 async def lifespan(app):
     STATE.mkdir(parents=True, exist_ok=True, mode=0o700)
-    with (STATE / 'server.lock').open('a') as lock:
-        try:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError as exc:
-            raise RuntimeError('동일한 상태 폴더를 사용 중인 파이프라인이 있습니다.') from exc
+    with instance_lock(STATE / 'server.lock'):
         app.state.jobs = Jobs()
         app.state.availability = Availability()
         try:
@@ -355,7 +352,7 @@ async def browse_folders(path: str | None = None):
                           key=lambda child: child.name.casefold())
     except OSError as exc:
         raise HTTPException(422, '이 폴더의 목록을 읽을 수 없습니다.') from exc
-    return {'path': str(current), 'parent': str(current.parent), 'home': str(Path.home()),
+    return {'path': str(current), 'parent': str(current.parent), 'home': str(Path.home()), 'drives': drive_roots(),
             'folders': [{'name': child.name, 'path': str(child)} for child in children[:250]]}
 
 
@@ -426,15 +423,47 @@ async def retry_run(identifier: str, request: Request):
     return await start_run(state, RunOptions.model_validate(run))
 
 
-@app.get('/api/runs/{identifier}/files/{filename}')
-async def run_file(identifier: str, filename: str, request: Request):
-    run = request.app.state.jobs.read(identifier)
-    files = run['result']['files'] if run['status'] == 'complete' and run['result'] else []
-    match = next((entry for entry in files if entry['name'] == filename), None)
+def output_folder(run):
+    if run['status'] != 'complete' or not run['result']:
+        raise HTTPException(404, '저장이 끝난 결과 폴더가 없습니다.')
+    folder = Path(run['destination']).resolve()
+    if not folder.is_dir():
+        raise HTTPException(404, '저장 위치에서 결과 폴더를 찾을 수 없습니다.')
+    return folder
+
+
+def output_file(run, filename):
+    folder = output_folder(run)
+    match = next((entry for entry in run['result']['files'] if entry['name'] == filename), None)
     if not match or Path(filename).name != filename:
         raise HTTPException(404, '이 실행에서 만든 파일을 찾을 수 없습니다.')
-    folder = Path(run['destination']).resolve()
     path = (folder / match['path']).resolve()
     if path.name != filename or not path.is_relative_to(folder) or not path.is_file():
         raise HTTPException(404, '저장 폴더에서 결과 파일을 찾을 수 없습니다.')
+    return path
+
+
+@app.get('/api/runs/{identifier}/files/{filename}')
+async def run_file(identifier: str, filename: str, request: Request):
+    path = output_file(request.app.state.jobs.read(identifier), filename)
     return FileResponse(path, filename=filename)
+
+
+@app.post('/api/runs/{identifier}/folder/open')
+async def open_run_folder(identifier: str, request: Request):
+    folder = output_folder(request.app.state.jobs.read(identifier))
+    try:
+        await open_path(folder)
+    except OSError as exc:
+        raise HTTPException(503, '파일 관리자를 열 수 없습니다. 경로를 복사해 파일 관리자에 입력해 주세요.') from exc
+    return {'opened': True}
+
+
+@app.post('/api/runs/{identifier}/files/{filename}/open')
+async def open_run_file(identifier: str, filename: str, request: Request):
+    path = output_file(request.app.state.jobs.read(identifier), filename)
+    try:
+        await open_path(path)
+    except OSError as exc:
+        raise HTTPException(503, '이 파일을 열 수 없습니다. 다운로드 후 CSV 또는 XLSX를 지원하는 앱에서 열어 주세요.') from exc
+    return {'opened': True}

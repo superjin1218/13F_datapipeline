@@ -201,6 +201,7 @@ hr { border: 0; border-top: 1px solid #e3e9f1; margin: 20px 0; }
 .dialog-heading { display: flex; justify-content: space-between; align-items: start; gap: 12px; margin-bottom: 14px; }
 .dialog-footer { display: flex; justify-content: end; gap: 7px; margin-top: 15px; }
 .folder-toolbar { display: flex; align-items: stretch; gap: 5px; }
+.folder-drive { margin-bottom: 8px; }
 .folder-toolbar > *:not(input) { flex: none; }
 .folder-toolbar .button { padding-inline: 9px; }
 .folder-list, .history-list { overflow: auto; max-height: min(48vh, 390px); margin-top: 10px; border: 1px solid var(--line); border-radius: 8px; }
@@ -229,6 +230,8 @@ hr { border: 0; border-top: 1px solid #e3e9f1; margin: 20px 0; }
 .filing-summary { margin-top: 10px; color: #415d86; font-size: 12px; }
 .result-grid { margin-top: 18px; padding-top: 17px; border-top: 1px solid var(--line); }
 .files details { min-width: 0; border: 1px solid var(--line); border-radius: 9px; padding: 10px; }
+.file-actions { display: flex; justify-content: flex-end; gap: 6px; }
+.file-actions .button { padding: 8px 10px; white-space: nowrap; }
 .files summary span { color: var(--muted); font-size: 11px; font-weight: 600; }
 
 @media (hover: hover) and (pointer: fine) {
@@ -262,6 +265,8 @@ hr { border: 0; border-top: 1px solid #e3e9f1; margin: 20px 0; }
   .start-row { flex-wrap: wrap; }
   .start { width: 100%; }
   .result-heading .button { white-space: nowrap; }
+  .file-actions .button { padding: 7px; font-size: 12px; }
+  .file-actions svg { display: none; }
   .panel { padding: 16px; }
   .dataset-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .operation .hero-art { --sky-position: 51% center; }
